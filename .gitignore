@@ -7,3 +7,10 @@ node_modules/
 *.log
 .cache/
 Thumbs.db
+
+# Flutter build outputs
+app/build/
+app/.dart_tool/
+app/.flutter-plugins-dependencies
+app/*.iml
+app/.idea/

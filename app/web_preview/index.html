@@ -1,0 +1,1557 @@
+<title>핏로그 라이브 프리뷰</title>
+<style>
+/* ─────────────────────────────────────────────────────────────
+   페이지 토큰 — 라이트가 기본, 다크는 미디어쿼리 + data-theme 로 덮어쓴다
+   ───────────────────────────────────────────────────────────── */
+:root{
+  --bg:#F4F5F9; --panel:#FFFFFF; --panel-2:#EDEFF6; --line:#DFE3EE;
+  --ink:#12151D; --ink-2:#545D72; --ink-3:#8A93A8;
+  --accent:#5B3FE0; --accent-soft:#EBE6FF;
+  --shadow:0 24px 60px -28px rgba(23,20,60,.34);
+  --grid-line:rgba(91,63,224,.055);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0A0C11; --panel:#10131B; --panel-2:#161A24; --line:#222839;
+    --ink:#E8EBF2; --ink-2:#98A1B5; --ink-3:#646E85;
+    --accent:#8B6BFF; --accent-soft:#1E1A3A;
+    --shadow:0 30px 70px -30px rgba(0,0,0,.85);
+    --grid-line:rgba(139,107,255,.06);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0A0C11; --panel:#10131B; --panel-2:#161A24; --line:#222839;
+  --ink:#E8EBF2; --ink-2:#98A1B5; --ink-3:#646E85;
+  --accent:#8B6BFF; --accent-soft:#1E1A3A;
+  --shadow:0 30px 70px -30px rgba(0,0,0,.85);
+  --grid-line:rgba(139,107,255,.06);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:system-ui,-apple-system,"Segoe UI","Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+  font-size:15px; line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+  background-image:linear-gradient(var(--grid-line) 1px,transparent 1px),
+                   linear-gradient(90deg,var(--grid-line) 1px,transparent 1px);
+  background-size:34px 34px;
+}
+.mono{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace}
+
+/* ── 페이지 레이아웃 ─────────────────────────────────────────── */
+.wrap{max-width:1240px;margin:0 auto;padding:34px 22px 70px}
+
+.masthead{
+  display:flex;align-items:flex-end;justify-content:space-between;gap:26px;
+  flex-wrap:wrap;padding-bottom:22px;margin-bottom:30px;
+  border-bottom:1px solid var(--line);
+}
+.eyebrow{
+  font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--accent);margin:0 0 10px;font-weight:600;
+}
+h1{
+  margin:0;font-size:clamp(34px,5.2vw,52px);line-height:1.02;
+  letter-spacing:-.035em;font-weight:800;text-wrap:balance;
+}
+h1 .sub{display:block;font-size:.4em;font-weight:600;letter-spacing:-.01em;color:var(--ink-2);margin-top:12px}
+.specs{display:flex;gap:0;flex-wrap:wrap;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel)}
+.spec{padding:10px 16px;border-right:1px solid var(--line)}
+.spec:last-child{border-right:0}
+.spec dt{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin:0 0 3px;
+  font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace}
+.spec dd{margin:0;font-size:13px;font-weight:700;letter-spacing:-.01em}
+
+.layout{display:grid;grid-template-columns:430px minmax(0,1fr);gap:44px;align-items:start}
+/* minmax(0,…) 이 없으면 열이 자식의 min-content 아래로 못 줄어들어 가로 스크롤이 생긴다 */
+@media (max-width:980px){.layout{grid-template-columns:minmax(0,1fr);gap:36px}}
+
+.stage,.rail{min-width:0}
+.stage{position:sticky;top:26px}
+@media (max-width:980px){.stage{position:static}}
+
+/* ── 디바이스 프레임 ─────────────────────────────────────────── */
+/* 기기는 390px 고정 폭이라 좁은 화면에서는 transform 으로 줄인다.
+   transform 은 레이아웃 폭을 줄이지 않으므로 가로 스크롤은 여기서 막는다. */
+.device-scaler{display:flex;justify-content:center;overflow:hidden}
+.device{
+  width:390px;height:812px;flex:none;
+  border-radius:44px;padding:11px;
+  background:linear-gradient(160deg,#3a3f4d,#14161d 42%,#2a2e39);
+  box-shadow:var(--shadow);
+  transform-origin:top center;
+}
+.screen{
+  position:relative;width:100%;height:100%;
+  border-radius:34px;overflow:hidden;
+  display:flex;flex-direction:column;
+  background:var(--c-canvas);
+  /* 앱 팔레트: 페이지 테마와 독립적으로 앱 자체의 다크/라이트를 따른다 */
+  --c-canvas:#0C0F14; --c-surface:#151A22; --c-alt:#1D242F; --c-border:#262E3A;
+  --c-t1:#F2F5F9; --c-t2:#9AA6B8; --c-t3:#5D6979;
+  --c-accent:#7C5CFF; --c-accent-soft:#2A2350;
+  --c-pos:#26E5A1; --c-neg:#FF5A6E; --c-warn:#FFB020;
+  color:var(--c-t1);
+  font-size:14px;line-height:1.5;
+  transition:background .3s ease;
+}
+.screen.light{
+  --c-canvas:#F5F7FB; --c-surface:#FFFFFF; --c-alt:#EEF1F7; --c-border:#DFE4ED;
+  --c-t1:#141821; --c-t2:#5B6577; --c-t3:#98A1B2;
+  --c-accent:#6247E6; --c-accent-soft:#E9E4FF;
+  --c-pos:#07A97A; --c-neg:#E03E52; --c-warn:#D98500;
+}
+
+/* 상태바 */
+.statusbar{
+  flex:none;display:flex;align-items:center;justify-content:space-between;
+  padding:13px 26px 6px;font-size:12.5px;font-weight:700;color:var(--c-t1);
+}
+.statusbar .icons{display:flex;gap:5px;align-items:center;opacity:.9}
+.statusbar svg{display:block}
+
+/* 앱 바디 */
+.app-body{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin}
+.app-body::-webkit-scrollbar{width:6px}
+.app-body::-webkit-scrollbar-thumb{background:var(--c-border);border-radius:3px}
+.page{padding:6px 18px 96px}
+
+/* 하단 탭바 */
+.tabbar{
+  flex:none;display:flex;background:var(--c-surface);
+  border-top:1px solid var(--c-border);padding:7px 4px 16px;
+}
+.tabbar button{
+  flex:1;background:none;border:0;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:4px;
+  padding:5px 0;color:var(--c-t3);font-size:11px;font-weight:600;font-family:inherit;
+}
+.tabbar button .pill{
+  display:flex;align-items:center;justify-content:center;
+  width:52px;height:30px;border-radius:15px;transition:background .18s ease;
+}
+.tabbar button[aria-selected="true"]{color:var(--c-accent)}
+.tabbar button[aria-selected="true"] .pill{background:var(--c-accent-soft)}
+.tabbar svg{display:block}
+
+/* FAB */
+.fab{
+  position:absolute;right:18px;bottom:88px;z-index:5;
+  display:flex;align-items:center;gap:7px;
+  padding:14px 20px;border:0;border-radius:17px;cursor:pointer;
+  background:var(--c-accent);color:#fff;font:inherit;font-size:14px;font-weight:700;
+  box-shadow:0 12px 28px -10px rgba(124,92,255,.75);
+}
+.fab:active{transform:scale(.97)}
+
+/* ── 앱 내부 컴포넌트 ───────────────────────────────────────── */
+.card{
+  background:var(--c-surface);border:1px solid var(--c-border);
+  border-radius:20px;padding:16px;
+}
+.card+.card{margin-top:10px}
+.h-title{font-size:17px;font-weight:700;letter-spacing:-.02em;margin:0}
+.h-sub{font-size:12px;color:var(--c-t3);margin:2px 0 0}
+.sec{margin:22px 0 12px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.big{font-size:25px;font-weight:800;letter-spacing:-.03em;margin:0}
+.muted{color:var(--c-t3)}
+.row{display:flex;align-items:center;gap:10px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.stat-label{font-size:12px;font-weight:600;color:var(--c-t2)}
+.stat-value{font-size:24px;font-weight:800;letter-spacing:-.03em;line-height:1.1}
+.stat-unit{font-size:12px;font-weight:600;color:var(--c-t3)}
+.ico{width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex:none}
+.chip{display:inline-flex;padding:3px 8px;border-radius:7px;font-size:10.5px;font-weight:700}
+.delta{display:flex;align-items:center;gap:3px;font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden}
+.dot{width:8px;height:8px;border-radius:50%;flex:none}
+.divider{height:1px;background:var(--c-border);margin:12px 0}
+.seg{display:flex;gap:4px;background:var(--c-alt);border-radius:14px;padding:4px}
+.seg button{
+  flex:1;border:1px solid transparent;background:none;border-radius:10px;cursor:pointer;
+  padding:9px 0;font:inherit;font-size:13px;font-weight:700;color:var(--c-t3);
+}
+.seg button[aria-pressed="true"]{background:var(--c-surface);border-color:var(--c-border);color:var(--c-t1)}
+.tap{cursor:pointer;-webkit-tap-highlight-color:transparent}
+.tap:active{opacity:.7}
+
+/* 캘린더 */
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.cal .wd{text-align:center;font-size:11px;font-weight:700;color:var(--c-t3);padding-bottom:2px}
+.cal .day{
+  aspect-ratio:1;border-radius:10px;border:1.4px solid transparent;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  font-size:12.5px;font-weight:500;background:var(--c-alt);color:var(--c-t2);
+  transition:transform .12s ease;
+}
+.cal .day.on{font-weight:800}
+.cal .day.today{border-color:var(--c-accent)}
+.cal .day.sel{border-color:var(--c-t1);border-width:2px}
+.cal .day:active{transform:scale(.92)}
+
+/* 세션 카드 */
+.metrics{display:flex;align-items:center}
+.metrics .m{flex:1}
+.metrics .vline{width:1px;height:22px;background:var(--c-border);margin:0 10px}
+
+/* 에디터 */
+.overlay{
+  position:absolute;inset:0;z-index:20;display:flex;flex-direction:column;
+  background:var(--c-canvas);animation:slideIn .26s cubic-bezier(.2,.8,.3,1);
+}
+@keyframes slideIn{from{transform:translateX(14%);opacity:.4}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.overlay{animation:none}}
+.appbar{
+  flex:none;display:flex;align-items:center;gap:6px;padding:12px 10px 10px 6px;
+  background:var(--c-canvas);
+}
+.appbar h2{flex:1;margin:0;font-size:19px;font-weight:700;letter-spacing:-.02em}
+.iconbtn{
+  background:none;border:0;cursor:pointer;color:var(--c-t1);
+  width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;
+}
+.iconbtn:active{background:var(--c-alt)}
+.txtbtn{background:none;border:0;cursor:pointer;color:var(--c-accent);font:inherit;font-size:14px;font-weight:800;padding:8px 10px;border-radius:10px}
+.summary-bar{
+  display:flex;padding:15px 18px;border-radius:20px;color:#fff;
+  background:linear-gradient(135deg,var(--c-accent),color-mix(in srgb,var(--c-accent) 72%,transparent));
+}
+.summary-bar .m{flex:1}
+.summary-bar .v{font-size:21px;font-weight:800;letter-spacing:-.02em}
+.summary-bar .l{font-size:11.5px;opacity:.8}
+.field{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.field>span{font-size:13.5px;font-weight:600;color:var(--c-t2)}
+.stepper{display:flex;align-items:center;background:var(--c-alt);border-radius:12px}
+.stepper button{width:36px;height:38px;border:0;background:none;cursor:pointer;color:var(--c-t1);font-size:17px;font-family:inherit}
+.stepper button:disabled{color:var(--c-t3);opacity:.4;cursor:default}
+.stepper .val{width:66px;text-align:center;font-size:14px;font-weight:700}
+.inp{
+  width:100%;background:var(--c-alt);border:1px solid var(--c-border);border-radius:12px;
+  padding:11px 12px;color:var(--c-t1);font:inherit;font-size:14px;
+}
+.inp:focus{outline:2px solid var(--c-accent);outline-offset:-1px;border-color:transparent}
+.inp.num{text-align:center;font-weight:700;padding:10px 6px}
+.inp::placeholder{color:var(--c-t3)}
+.setrow{display:flex;align-items:center;gap:7px;margin-bottom:8px}
+.setrow .n{width:22px;font-size:13px;font-weight:800;flex:none}
+.stars{display:flex;gap:3px}
+.stars button{background:none;border:0;cursor:pointer;padding:0;font-size:22px;line-height:1;color:var(--c-t3)}
+.stars button.on{color:var(--c-warn)}
+.outline-btn{
+  width:100%;background:none;border:1px solid var(--c-border);border-radius:14px;
+  padding:13px;color:var(--c-t1);font:inherit;font-size:14px;font-weight:600;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+}
+.outline-btn:active{background:var(--c-alt)}
+.fill-btn{
+  width:100%;background:var(--c-accent);border:0;border-radius:14px;
+  padding:15px;color:#fff;font:inherit;font-size:15px;font-weight:700;cursor:pointer;
+}
+.fill-btn:active{opacity:.85}
+.pickrow{
+  display:flex;align-items:center;gap:10px;padding:12px 6px;cursor:pointer;
+  border-bottom:1px solid var(--c-border);
+}
+.pickrow:last-child{border-bottom:0}
+.pickrow:active{background:var(--c-alt)}
+.filters{display:flex;gap:7px;overflow-x:auto;padding:2px 18px 10px;scrollbar-width:none}
+.filters::-webkit-scrollbar{display:none}
+.filters button{
+  flex:none;padding:8px 14px;border-radius:11px;cursor:pointer;font:inherit;
+  font-size:12.5px;font-weight:700;background:var(--c-surface);
+  border:1px solid var(--c-border);color:var(--c-t2);
+}
+.switch{
+  width:46px;height:27px;border-radius:14px;border:0;cursor:pointer;padding:3px;
+  background:var(--c-alt);display:flex;transition:background .2s ease;
+}
+.switch .knob{width:21px;height:21px;border-radius:50%;background:var(--c-t3);transition:transform .2s ease,background .2s ease}
+.switch[aria-checked="true"]{background:var(--c-accent)}
+.switch[aria-checked="true"] .knob{transform:translateX(19px);background:#fff}
+input[type=range]{width:100%;accent-color:var(--c-accent)}
+.toast{
+  position:absolute;left:18px;right:18px;bottom:92px;z-index:30;
+  background:var(--c-alt);border:1px solid var(--c-border);border-radius:12px;
+  padding:12px 15px;font-size:13px;font-weight:600;
+  animation:toastIn .2s ease;
+}
+@keyframes toastIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.empty{text-align:center;padding:34px 18px}
+.empty .box{
+  width:58px;height:58px;border-radius:19px;background:var(--c-alt);
+  display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:24px;
+}
+
+/* ── 페이지 우측 콘텐츠 ─────────────────────────────────────── */
+.rail{display:flex;flex-direction:column;gap:34px}
+.block h2{
+  margin:0 0 4px;font-size:22px;font-weight:800;letter-spacing:-.028em;text-wrap:balance;
+}
+.block .lede{margin:0 0 18px;color:var(--ink-2);max-width:62ch}
+.tag{
+  display:inline-block;font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3);
+  margin-bottom:9px;font-weight:600;
+}
+
+.screenlist{display:flex;flex-direction:column;gap:9px}
+.screenlist button{
+  display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:14px;
+  text-align:left;width:100%;cursor:pointer;font:inherit;
+  background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:15px 17px;
+  color:var(--ink);transition:border-color .16s ease,transform .16s ease;
+}
+.screenlist button:hover{border-color:var(--accent);transform:translateX(3px)}
+.screenlist button[aria-current="true"]{border-color:var(--accent);background:var(--accent-soft)}
+.screenlist button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.screenlist .num{
+  font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  font-size:11px;font-weight:700;color:var(--accent);
+}
+.screenlist .nm{display:block;font-weight:700;font-size:15px;letter-spacing:-.015em}
+.screenlist .ds{display:block;font-size:13px;color:var(--ink-2);margin-top:2px;line-height:1.45}
+.screenlist .go{font-size:12px;color:var(--ink-3);white-space:nowrap}
+
+.metrics-table{width:100%;border-collapse:collapse;font-size:14px}
+.metrics-table th{
+  text-align:left;padding:0 12px 9px 0;font-size:10.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ink-3);font-weight:600;border-bottom:1px solid var(--line);
+  font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+}
+.metrics-table td{padding:13px 12px 13px 0;border-bottom:1px solid var(--line);vertical-align:top}
+.metrics-table td:first-child{font-weight:700;white-space:nowrap;letter-spacing:-.01em}
+.metrics-table td:last-child{color:var(--ink-2);padding-right:0}
+.metrics-table code{
+  font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  font-size:12.5px;background:var(--panel-2);padding:2px 6px;border-radius:5px;
+  color:var(--accent);white-space:nowrap;
+}
+.scroller{overflow-x:auto}
+
+pre.tree{
+  margin:0;padding:20px 22px;background:var(--panel);border:1px solid var(--line);
+  border-radius:15px;overflow-x:auto;font-size:12.5px;line-height:1.85;color:var(--ink-2);
+  font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+}
+pre.tree b{color:var(--ink);font-weight:700}
+pre.tree i{color:var(--ink-3);font-style:normal}
+
+.cmds{display:flex;flex-direction:column;gap:10px}
+.cmd{
+  background:var(--panel);border:1px solid var(--line);border-radius:13px;
+  padding:14px 17px;display:flex;flex-direction:column;gap:5px;
+}
+.cmd code{
+  font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  font-size:13px;color:var(--ink);font-weight:600;
+}
+.cmd code::before{content:"$ ";color:var(--accent)}
+.cmd span{font-size:12.5px;color:var(--ink-3)}
+
+.pagefoot{
+  margin-top:52px;padding-top:22px;border-top:1px solid var(--line);
+  display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;
+  font-size:12.5px;color:var(--ink-3);
+}
+.checks{display:flex;gap:16px;flex-wrap:wrap}
+.checks b{color:var(--ink);font-weight:700}
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <div>
+      <p class="eyebrow">Flutter · 네이티브 앱 라이브 프리뷰</p>
+      <h1>핏로그<span class="sub">운동 기록과 통계를, 한 손으로</span></h1>
+    </div>
+    <dl class="specs">
+      <div class="spec"><dt>Framework</dt><dd>Flutter 3.35</dd></div>
+      <div class="spec"><dt>Targets</dt><dd>iOS · Android · Web</dd></div>
+      <div class="spec"><dt>State</dt><dd>Provider</dd></div>
+      <div class="spec"><dt>Storage</dt><dd>기기 로컬</dd></div>
+    </dl>
+  </header>
+
+  <div class="layout">
+    <!-- ───────────────── 디바이스 ───────────────── -->
+    <div class="stage">
+      <div class="device-scaler">
+        <div class="device" id="device">
+          <div class="screen" id="screen">
+            <div class="statusbar">
+              <span id="clock">9:41</span>
+              <span class="icons">
+                <svg width="17" height="11" viewBox="0 0 17 11" fill="currentColor" aria-hidden="true"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="4.5" y="5" width="3" height="6" rx="1"/><rect x="9" y="2.5" width="3" height="8.5" rx="1"/><rect x="13.5" y="0" width="3" height="11" rx="1"/></svg>
+                <svg width="25" height="12" viewBox="0 0 25 12" fill="none" aria-hidden="true"><rect x=".6" y=".6" width="21" height="10.8" rx="3" stroke="currentColor" stroke-opacity=".45"/><rect x="2.2" y="2.2" width="15" height="7.6" rx="1.8" fill="currentColor"/><path d="M23.2 4v4a2.1 2.1 0 0 0 0-4z" fill="currentColor" fill-opacity=".45"/></svg>
+              </span>
+            </div>
+            <div class="app-body" id="appBody"></div>
+            <button class="fab" id="fab" type="button">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+              운동 기록
+            </button>
+            <nav class="tabbar" id="tabbar" aria-label="앱 하단 탭"></nav>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ───────────────── 설명 레일 ───────────────── -->
+    <div class="rail">
+      <section class="block">
+        <p class="tag">읽기 전에</p>
+        <h2>왼쪽 화면은 그림이 아니라, 실제로 눌리는 앱입니다</h2>
+        <p class="lede">
+          Flutter로 만든 <b>핏로그</b>의 화면 구성과 계산 로직을 웹에 그대로 옮겨 놓았습니다.
+          세트를 추가하거나 무게를 고치면 볼륨·통계·차트가 그 자리에서 다시 계산됩니다.
+          기록은 10주치 예시 데이터로 미리 채워져 있어요.
+        </p>
+      </section>
+
+      <section class="block">
+        <p class="tag">화면 구성</p>
+        <h2>네 개의 탭</h2>
+        <p class="lede">아래 항목을 누르면 왼쪽 화면이 해당 탭으로 이동합니다.</p>
+        <div class="screenlist" id="screenlist"></div>
+      </section>
+
+      <section class="block">
+        <p class="tag">통계 엔진</p>
+        <h2>무엇을 계산하나</h2>
+        <p class="lede">
+          모든 지표는 화면과 분리된 순수 함수(<code class="mono">lib/utils/stats.dart</code>)에서 계산하고,
+          21개의 단위 테스트로 검증합니다.
+        </p>
+        <div class="scroller">
+          <table class="metrics-table">
+            <thead><tr><th>지표</th><th>정의</th></tr></thead>
+            <tbody>
+              <tr><td>총 볼륨</td><td><code>무게 × 횟수</code>의 합. 체크하지 않은 세트는 제외합니다.</td></tr>
+              <tr><td>추정 1RM</td><td>Epley 공식 <code>w × (1 + r ÷ 30)</code>. 1회 세트는 무게 그대로.</td></tr>
+              <tr><td>연속 기록</td><td>오늘부터 거꾸로 세되, 오늘 쉬었어도 어제까지 이어졌다면 유지합니다.</td></tr>
+              <tr><td>부위별 분포</td><td>부위별 볼륨 비율. 유산소는 <code>1분 = 100kg</code>으로 환산해 같이 표시합니다.</td></tr>
+              <tr><td>증감률</td><td>직전 동일 길이 구간과 비교. 비교 대상이 없으면 표시하지 않습니다.</td></tr>
+              <tr><td>개인 기록</td><td>종목마다 가장 높은 추정 1RM. 유산소는 대상에서 제외합니다.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="block">
+        <p class="tag">프로젝트 구조</p>
+        <h2>코드가 놓인 자리</h2>
+        <pre class="tree"><b>app/</b>
+├── <b>lib/</b>
+│   ├── main.dart              <i>앱 진입점 · 테마 연결</i>
+│   ├── models/models.dart     <i>세션 · 종목 · 세트 + JSON</i>
+│   ├── data/
+│   │   ├── exercise_catalog.dart   <i>기본 종목 28개</i>
+│   │   ├── sample_data.dart        <i>10주치 예시 기록</i>
+│   │   └── workout_repository.dart <i>로컬 저장</i>
+│   ├── state/workout_store.dart    <i>단일 상태 소유자</i>
+│   ├── utils/stats.dart            <i>통계 엔진</i>
+│   ├── widgets/charts.dart         <i>CustomPainter 차트</i>
+│   └── screens/                    <i>홈 · 기록 · 통계 · 설정 · 편집</i>
+└── <b>test/</b>stats_test.dart <i>단위 테스트 21개</i></pre>
+      </section>
+
+      <section class="block">
+        <p class="tag">직접 실행하기</p>
+        <h2>내 기기에서 돌려보려면</h2>
+        <div class="cmds">
+          <div class="cmd"><code>cd app &amp;&amp; flutter pub get</code><span>의존성을 내려받습니다</span></div>
+          <div class="cmd"><code>flutter run</code><span>연결된 iOS · Android 기기에서 실행</span></div>
+          <div class="cmd"><code>flutter run -d chrome</code><span>브라우저에서 바로 확인</span></div>
+          <div class="cmd"><code>flutter test</code><span>통계 엔진 테스트 21개 실행</span></div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <footer class="pagefoot">
+    <div class="checks">
+      <span><b>flutter analyze</b> 이슈 0건</span>
+      <span><b>flutter test</b> 21개 통과</span>
+      <span><b>flutter build web</b> 성공</span>
+    </div>
+    <span>기록은 기기 안에만 저장됩니다</span>
+  </footer>
+</div>
+
+<script>
+"use strict";
+/* ══════════════════════════════════════════════════════════════
+   Flutter 앱의 모델 · 통계 엔진 · 화면을 웹으로 옮긴 프리뷰.
+   Dart 쪽 lib/utils/stats.dart 와 같은 규칙으로 계산한다.
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── 부위 · 종목 카탈로그 ─────────────────────────────────── */
+const GROUPS = {
+  chest:{label:'가슴',color:'#7C5CFF'}, back:{label:'등',color:'#3B9EFF'},
+  legs:{label:'하체',color:'#26E5A1'}, shoulders:{label:'어깨',color:'#FFB020'},
+  arms:{label:'팔',color:'#FF6B9D'},   core:{label:'코어',color:'#9B8AFF'},
+  cardio:{label:'유산소',color:'#FF5A6E'},
+};
+const GROUP_ORDER = ['chest','back','legs','shoulders','arms','core','cardio'];
+
+const EX = [
+  ['bench_press','벤치프레스','chest'], ['incline_bench','인클라인 벤치프레스','chest'],
+  ['db_fly','덤벨 플라이','chest'], ['chest_press','체스트 프레스 머신','chest'],
+  ['push_up','푸시업','chest','body'],
+  ['deadlift','데드리프트','back'], ['barbell_row','바벨 로우','back'],
+  ['lat_pulldown','랫풀다운','back'], ['seated_row','시티드 로우','back'],
+  ['pull_up','풀업','back','body'],
+  ['squat','스쿼트','legs'], ['leg_press','레그프레스','legs'],
+  ['leg_extension','레그 익스텐션','legs'], ['leg_curl','레그 컬','legs'], ['lunge','런지','legs'],
+  ['ohp','오버헤드 프레스','shoulders'], ['side_lateral','사이드 래터럴 레이즈','shoulders'],
+  ['face_pull','페이스 풀','shoulders'],
+  ['barbell_curl','바벨 컬','arms'], ['db_curl','덤벨 컬','arms'],
+  ['cable_pushdown','케이블 푸시다운','arms'],
+  ['plank','플랭크','core','body'], ['hanging_leg_raise','행잉 레그레이즈','core','body'],
+  ['crunch','크런치','core','body'],
+  ['running','러닝','cardio','cardio'], ['cycling','사이클','cardio','cardio'],
+  ['rowing','로잉머신','cardio','cardio'], ['incline_walk','경사 걷기','cardio','cardio'],
+].map(([id,name,group,tracking])=>({id,name,group,tracking:tracking||'weight'}));
+
+const EX_BY_ID = Object.fromEntries(EX.map(e=>[e.id,e]));
+const exDef = id => EX_BY_ID[id] || {id,name:'알 수 없는 종목',group:'chest',tracking:'weight'};
+
+/* ── 날짜 헬퍼 (키는 'YYYY-MM-DD') ─────────────────────────── */
+const WD = ['월','화','수','목','금','토','일'];
+const pad = n => String(n).padStart(2,'0');
+const key = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const parse = s => { const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d); };
+const addDays = (d,n) => { const x=new Date(d); x.setDate(x.getDate()+n); return x; };
+const today = () => { const t=new Date(); return new Date(t.getFullYear(),t.getMonth(),t.getDate()); };
+const wdIndex = d => (d.getDay()+6)%7;                       // 월=0
+const startOfWeek = d => addDays(d,-wdIndex(d));
+const daysBetween = (a,b) => Math.round((b-a)/86400000);
+const fmtDay = d => `${d.getMonth()+1}월 ${d.getDate()}일 (${WD[wdIndex(d)]})`;
+const fmtShort = d => `${d.getMonth()+1}/${d.getDate()}`;
+const fmtMonth = d => `${d.getFullYear()}년 ${d.getMonth()+1}월`;
+function fmtRelative(ds){
+  const diff = daysBetween(parse(ds), today());
+  if(diff===0) return '오늘';
+  if(diff===1) return '어제';
+  if(diff===2) return '그저께';
+  if(diff>0 && diff<7) return `${diff}일 전`;
+  return fmtDay(parse(ds));
+}
+const fmtDuration = m => m<=0 ? '-' : (m<60 ? `${m}분` : (m%60===0 ? `${m/60}시간` : `${Math.floor(m/60)}시간 ${m%60}분`));
+const thousands = n => Math.round(n).toLocaleString('en-US');
+function compact(v){
+  if(Math.abs(v)>=1e6) return (v/1e6).toFixed(1)+'M';
+  if(Math.abs(v)>=1e4) return (v/1e3).toFixed(1)+'k';
+  return thousands(v);
+}
+const fmtWeight = w => Number.isInteger(w) ? String(w) : w.toFixed(1);
+
+/* ── 세션 계산 ─────────────────────────────────────────────── */
+const setVolume = s => s.done ? s.w*s.r : 0;
+function set1rm(s){
+  if(!s.done || s.w<=0 || s.r<=0) return 0;
+  return s.r===1 ? s.w : s.w*(1+s.r/30);
+}
+const exVolume  = e => (e.sets||[]).reduce((a,s)=>a+setVolume(s),0);
+const exReps    = e => (e.sets||[]).reduce((a,s)=>a+(s.done?s.r:0),0);
+const exDoneSets= e => (e.sets||[]).filter(s=>s.done).length;
+const ex1rm     = e => (e.sets||[]).reduce((m,s)=>Math.max(m,set1rm(s)),0);
+const exTopW    = e => (e.sets||[]).filter(s=>s.done).reduce((m,s)=>Math.max(m,s.w),0);
+const sVolume   = s => s.exercises.reduce((a,e)=>a+exVolume(e),0);
+const sSets     = s => s.exercises.reduce((a,e)=>a+exDoneSets(e),0);
+const sReps     = s => s.exercises.reduce((a,e)=>a+exReps(e),0);
+
+/* ── 예시 데이터 (Dart sample_data.dart 와 같은 구조) ─────── */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function generateSample(weeks=10){
+  const rnd = mulberry32(20260815);
+  const ri = n => Math.floor(rnd()*n);
+  const routines = {
+    '가슴 · 삼두':['bench_press','incline_bench','db_fly','cable_pushdown'],
+    '등 · 이두':['deadlift','lat_pulldown','seated_row','barbell_curl'],
+    '하체 · 어깨':['squat','leg_press','ohp','side_lateral'],
+  };
+  const names = Object.keys(routines);
+  const base = {bench_press:55,incline_bench:42.5,db_fly:14,cable_pushdown:25,deadlift:80,
+    lat_pulldown:50,seated_row:45,barbell_curl:22.5,squat:70,leg_press:120,ohp:32.5,side_lateral:8};
+  const gain = {bench_press:1.25,incline_bench:1,db_fly:.5,cable_pushdown:.75,deadlift:2.5,
+    lat_pulldown:1.25,seated_row:1.25,barbell_curl:.5,squat:2,leg_press:4,ohp:.75,side_lateral:.25};
+
+  const t = today(), out = [];
+  let seq = 0;
+  for(let week=weeks-1; week>=0; week--){
+    const cand = [1,2,4,5,6];                       // 월 화 목 금 토
+    for(let i=cand.length-1;i>0;i--){const j=ri(i+1);[cand[i],cand[j]]=[cand[j],cand[i]];}
+    const days = cand.slice(0, 3+ri(3)).sort((a,b)=>a-b);
+    const ws = addDays(startOfWeek(t), -7*week);
+
+    for(const wd of days){
+      const date = addDays(ws, wd-1);
+      if(date > t) continue;
+      const name = names[seq % names.length];
+      seq++;
+      const progress = weeks-1-week;
+      const exercises = [];
+      for(const id of routines[name]){
+        const raw = base[id] + gain[id]*progress + (ri(3)-1)*1.25;
+        const w = Math.round(raw/1.25)*1.25;
+        const n = 3 + (ri(10)<4 ? 1 : 0);
+        const sets = [];
+        for(let s=0;s<n;s++) sets.push({w, r:Math.min(12,Math.max(5, 10-s+ri(3)-1)), done:true});
+        exercises.push({exerciseId:id, sets});
+      }
+      if(ri(5)===0){
+        const min = 15+ri(21);
+        exercises.push({exerciseId:'running', sets:[], durationMin:min, distanceKm:Math.round(min/6.2*10)/10});
+      }
+      out.push({
+        id:`sample_${key(date)}_${seq}`, date:key(date), title:name, exercises,
+        durationMin:55+ri(35), condition:Math.max(1,Math.min(5,3+ri(3)-(ri(6)===0?1:0))),
+        memo: ri(4)===0 ? '컨디션 좋았음. 마지막 세트까지 깔끔하게.' : '',
+      });
+    }
+  }
+  return out.sort((a,b)=>b.date.localeCompare(a.date));
+}
+
+/* ── 통계 엔진 ─────────────────────────────────────────────── */
+const S = {
+  inRange(from,to){
+    const f=key(from), t=key(to);
+    return state.sessions.filter(s=>s.date>=f && s.date<=t);
+  },
+  forRange(days){ return S.inRange(addDays(today(),-(days-1)), today()); },
+  summarize(list){
+    return list.reduce((a,s)=>({
+      count:a.count+1, volume:a.volume+sVolume(s), sets:a.sets+sSets(s),
+      reps:a.reps+sReps(s), minutes:a.minutes+s.durationMin,
+    }),{count:0,volume:0,sets:0,reps:0,minutes:0});
+  },
+  trainedDays(){ return new Set(state.sessions.map(s=>s.date)); },
+  currentStreak(){
+    const days = S.trainedDays();
+    if(!days.size) return 0;
+    let cursor = days.has(key(today())) ? today() : addDays(today(),-1);
+    if(!days.has(key(cursor))) return 0;
+    let n=0;
+    while(days.has(key(cursor))){ n++; cursor = addDays(cursor,-1); }
+    return n;
+  },
+  longestStreak(){
+    const days=[...S.trainedDays()].sort();
+    if(!days.length) return 0;
+    let best=1, run=1;
+    for(let i=1;i<days.length;i++){
+      if(daysBetween(parse(days[i-1]),parse(days[i]))===1){ run++; best=Math.max(best,run); }
+      else run=1;
+    }
+    return best;
+  },
+  volumeByDay(){
+    const m={};
+    for(const s of state.sessions) m[s.date]=(m[s.date]||0)+sVolume(s);
+    return m;
+  },
+  dailyVolume(days){
+    const by=S.volumeByDay(), start=addDays(today(),-(days-1)), out=[];
+    for(let i=0;i<days;i++){
+      const d=addDays(start,i);
+      out.push({label:fmtShort(d), value:by[key(d)]||0});
+    }
+    return out;
+  },
+  weeklyVolume(weeks){
+    const thisWeek=startOfWeek(today()), out=[];
+    for(let i=0;i<weeks;i++){
+      const ws=addDays(thisWeek,-7*(weeks-1-i));
+      out.push({label:fmtShort(ws), value:S.inRange(ws,addDays(ws,6)).reduce((a,s)=>a+sVolume(s),0)});
+    }
+    return out;
+  },
+  byWeekday(days){
+    const c=[0,0,0,0,0,0,0];
+    for(const s of S.forRange(days)) c[wdIndex(parse(s.date))]++;
+    return WD.map((w,i)=>({label:w, value:c[i]}));
+  },
+  groupDistribution(days){
+    const tot={};
+    for(const s of S.forRange(days)) for(const e of s.exercises){
+      const def=exDef(e.exerciseId);
+      const v = def.tracking==='cardio' ? (e.durationMin||0)*100 : exVolume(e);
+      if(v>0) tot[def.group]=(tot[def.group]||0)+v;
+    }
+    const sum=Object.values(tot).reduce((a,b)=>a+b,0);
+    if(!sum) return [];
+    return Object.entries(tot)
+      .map(([g,v])=>({group:g, value:v, ratio:v/sum}))
+      .sort((a,b)=>b.value-a.value);
+  },
+  oneRepMaxTrend(id){
+    const out=[];
+    for(const s of [...state.sessions].sort((a,b)=>a.date.localeCompare(b.date)))
+      for(const e of s.exercises){
+        if(e.exerciseId!==id) continue;
+        const v=ex1rm(e);
+        if(v>0) out.push({label:fmtShort(parse(s.date)), value:v});
+      }
+    return out;
+  },
+  personalRecords(){
+    const best={};
+    for(const s of state.sessions) for(const e of s.exercises){
+      const def=exDef(e.exerciseId);
+      if(def.tracking==='cardio') continue;
+      const v=ex1rm(e);
+      if(v<=0) continue;
+      if(!best[e.exerciseId] || v>best[e.exerciseId].best1rm)
+        best[e.exerciseId]={def, best1rm:v, topWeight:exTopW(e), date:s.date};
+    }
+    return Object.values(best).sort((a,b)=>b.best1rm-a.best1rm);
+  },
+  volumeChange(days){
+    const t=today();
+    const curStart=addDays(t,-(days-1));
+    const prevEnd=addDays(curStart,-1), prevStart=addDays(prevEnd,-(days-1));
+    const cur=S.inRange(curStart,t).reduce((a,s)=>a+sVolume(s),0);
+    const prev=S.inRange(prevStart,prevEnd).reduce((a,s)=>a+sVolume(s),0);
+    return prev<=0 ? null : (cur-prev)/prev*100;
+  },
+  sessionsOn(ds){ return state.sessions.filter(s=>s.date===ds); },
+  lastPerformed(id, exclude){
+    for(const s of state.sessions){
+      if(s.id===exclude) continue;
+      for(const e of s.exercises) if(e.exerciseId===id && e.sets && e.sets.length) return e;
+    }
+    return null;
+  },
+  thisWeekCount(){
+    const ws=startOfWeek(today());
+    return new Set(S.inRange(ws,addDays(ws,6)).map(s=>s.date)).size;
+  },
+};
+
+/* ── 차트 (SVG) ───────────────────────────────────────────── */
+const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function barChart(points,{h=150,color='var(--c-accent)',labelEvery}={}){
+  if(!points.length) return emptyChart(h);
+  const W=320, LH=16, plot=h-LH;
+  const max=Math.max(...points.map(p=>p.value));
+  const safe=max<=0?1:max;
+  const step=labelEvery||Math.max(1,Math.ceil(points.length/7));
+  const slot=W/points.length, bw=Math.min(slot*.62,22), r=bw/2.6;
+  let g='';
+  for(let i=0;i<=2;i++){
+    const y=(plot*i/2).toFixed(1);
+    g+=`<line x1="0" y1="${y}" x2="${W}" y2="${y}" stroke="var(--c-border)" stroke-width="1"/>`;
+  }
+  points.forEach((p,i)=>{
+    const cx=slot*i+slot/2, x=cx-bw/2;
+    if(p.value>0){
+      const bh=Math.max(3, plot*(p.value/safe));
+      const isMax=p.value===max;
+      g+=`<rect x="${x.toFixed(1)}" y="${(plot-bh).toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}"
+            rx="${r.toFixed(1)}" fill="${color}" opacity="${isMax?1:.42}"/>`;
+    }else{
+      g+=`<rect x="${x.toFixed(1)}" y="${plot-3}" width="${bw.toFixed(1)}" height="3" rx="1.5" fill="var(--c-border)"/>`;
+    }
+    // 마지막 라벨은 항상 그리고, 그 바로 앞의 주기 라벨은 겹치므로 건너뛴다.
+    const lastIdx=points.length-1;
+    if(i===lastIdx || (i%step===0 && lastIdx-i>=step*0.6))
+      g+=`<text x="${cx.toFixed(1)}" y="${plot+12}" text-anchor="middle" font-size="10"
+            font-weight="500" fill="var(--c-t3)">${esc(p.label)}</text>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${h}" width="100%" height="${h}" role="img" aria-label="막대 차트">${g}</svg>`;
+}
+
+function lineChart(points,{h=180,color='var(--c-accent)',fmt=v=>v.toFixed(0)}={}){
+  if(!points.length) return emptyChart(h);
+  const W=320, LH=16, PT=18, plot=h-LH-PT;
+  let mn=Math.min(...points.map(p=>p.value)), mx=Math.max(...points.map(p=>p.value));
+  if(mx-mn<1e-6){ mx+=1; mn-=1; } else { const p=(mx-mn)*.15; mx+=p; mn-=p; }
+  const X=i=>points.length===1?W/2:W*i/(points.length-1);
+  const Y=v=>PT+plot*(1-(v-mn)/(mx-mn));
+  let g='';
+  for(let i=0;i<=2;i++){
+    const y=(PT+plot*i/2).toFixed(1);
+    g+=`<line x1="0" y1="${y}" x2="${W}" y2="${y}" stroke="var(--c-border)" stroke-width="1"/>`;
+  }
+  const pts=points.map((p,i)=>`${X(i).toFixed(1)},${Y(p.value).toFixed(1)}`);
+  const uid='lg'+Math.random().toString(36).slice(2,8);
+  g+=`<defs><linearGradient id="${uid}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="${color}" stop-opacity=".3"/>
+        <stop offset="1" stop-color="${color}" stop-opacity="0"/></linearGradient></defs>`;
+  g+=`<polygon points="${X(0).toFixed(1)},${(PT+plot).toFixed(1)} ${pts.join(' ')} ${X(points.length-1).toFixed(1)},${(PT+plot).toFixed(1)}" fill="url(#${uid})"/>`;
+  g+=`<polyline points="${pts.join(' ')}" fill="none" stroke="${color}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`;
+  points.forEach((p,i)=>{
+    const last=i===points.length-1, rr=last?5.5:3;
+    g+=`<circle cx="${X(i).toFixed(1)}" cy="${Y(p.value).toFixed(1)}" r="${rr}"
+          fill="var(--c-surface)" stroke="${color}" stroke-width="${last?3:2}"/>`;
+  });
+  const lv=points[points.length-1].value;
+  g+=`<text x="${Math.min(W-24,Math.max(24,X(points.length-1))).toFixed(1)}" y="${Math.max(11,Y(lv)-11).toFixed(1)}"
+        text-anchor="middle" font-size="11" font-weight="700" fill="${color}">${esc(fmt(lv))}</text>`;
+  g+=`<text x="0" y="${h-4}" font-size="10" fill="var(--c-t3)">${esc(points[0].label)}</text>`;
+  if(points.length>1)
+    g+=`<text x="${W}" y="${h-4}" text-anchor="end" font-size="10" fill="var(--c-t3)">${esc(points[points.length-1].label)}</text>`;
+  return `<svg viewBox="0 0 ${W} ${h}" width="100%" height="${h}" role="img" aria-label="추이 차트">${g}</svg>`;
+}
+
+function donut(slices,size=148){
+  const sw=size*.16, r=(size-sw)/2, C=2*Math.PI*r, cx=size/2;
+  let g=`<circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="var(--c-alt)" stroke-width="${sw}"/>`;
+  let offset=0;
+  const gapPx=C*0.012;
+  for(const s of slices){
+    const len=C*s.ratio;
+    if(len<=gapPx){ offset+=len; continue; }
+    g+=`<circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="${GROUPS[s.group].color}"
+          stroke-width="${sw}" stroke-linecap="round"
+          stroke-dasharray="${(len-gapPx).toFixed(2)} ${(C-len+gapPx).toFixed(2)}"
+          stroke-dashoffset="${(-offset-gapPx/2).toFixed(2)}"
+          transform="rotate(-90 ${cx} ${cx})"/>`;
+    offset+=len;
+  }
+  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" role="img" aria-label="부위별 분포">${g}</svg>`;
+}
+
+function ring(progress,size=88,sw=9){
+  const r=(size-sw)/2, C=2*Math.PI*r, cx=size/2;
+  const p=Math.max(0,Math.min(1,progress));
+  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" aria-hidden="true">
+    <circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="var(--c-alt)" stroke-width="${sw}"/>
+    <circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="var(--c-accent)" stroke-width="${sw}"
+      stroke-linecap="round" stroke-dasharray="${(C*p).toFixed(2)} ${C.toFixed(2)}"
+      transform="rotate(-90 ${cx} ${cx})"/></svg>`;
+}
+
+const emptyChart = h => `<div style="height:${h}px;display:flex;align-items:center;justify-content:center;color:var(--c-t3);font-size:13px">표시할 기록이 없어요</div>`;
+
+/* ── 공용 조각 ─────────────────────────────────────────────── */
+function statTile({label,value,unit,delta,icon,accent='var(--c-accent)'}){
+  return `<div class="card" style="padding:15px 16px">
+    <div class="row" style="gap:8px">
+      <div class="ico" style="background:color-mix(in srgb,${accent} 14%,transparent);color:${accent}">${icon||''}</div>
+      <span class="stat-label">${esc(label)}</span>
+    </div>
+    <div class="row" style="gap:3px;align-items:baseline;margin-top:10px">
+      <span class="stat-value">${esc(value)}</span><span class="stat-unit">${esc(unit||'')}</span>
+    </div>
+    ${delta==null?'':deltaBadge(delta)}
+  </div>`;
+}
+function deltaBadge(d){
+  const up=d>=0, c=up?'var(--c-pos)':'var(--c-neg)';
+  return `<div class="delta" style="color:${c};margin-top:6px">
+    ${up?icoUp:icoDown}${up?'+':''}${d.toFixed(0)}%
+    <span class="muted" style="font-weight:400">지난 기간 대비</span></div>`;
+}
+function sectionHead(title,sub,action){
+  return `<div class="sec"><div>
+    <p class="h-title">${esc(title)}</p>${sub?`<p class="h-sub">${esc(sub)}</p>`:''}
+  </div>${action||''}</div>`;
+}
+function groupChip(g){
+  return `<span class="chip" style="background:color-mix(in srgb,${GROUPS[g].color} 15%,transparent);color:${GROUPS[g].color}">${GROUPS[g].label}</span>`;
+}
+function emptyBox(icon,title,msg,action){
+  return `<div class="empty"><div class="box">${icon}</div>
+    <p style="margin:0;font-size:16px;font-weight:700">${esc(title)}</p>
+    ${msg?`<p class="muted" style="margin:6px 0 0;font-size:13px">${esc(msg)}</p>`:''}
+    ${action?`<div style="margin-top:16px">${action}</div>`:''}</div>`;
+}
+function sessionCard(s,{showDate=true}={}){
+  const groups=[...new Set(s.exercises.map(e=>exDef(e.exerciseId).group))];
+  const title=s.title || groups.map(g=>GROUPS[g].label).join(' · ') || '운동 기록';
+  return `<div class="card tap" data-open="${s.id}">
+    <div class="row">
+      <div style="flex:1;min-width:0">
+        <p style="margin:0;font-size:15.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(title)}</p>
+        ${showDate?`<p class="h-sub" style="margin-top:3px">${esc(fmtRelative(s.date))} · ${esc(fmtDuration(s.durationMin))}</p>`:''}
+      </div>${icoChevron}
+    </div>
+    <div class="metrics" style="margin-top:12px">
+      ${metric(compact(sVolume(s)),'kg')}<div class="vline"></div>
+      ${metric(sSets(s),'세트')}<div class="vline"></div>
+      ${metric(s.exercises.length,'종목')}
+    </div>
+    ${groups.length?`<div class="row" style="gap:6px;flex-wrap:wrap;margin-top:12px">${groups.map(groupChip).join('')}</div>`:''}
+  </div>`;
+}
+const metric=(v,u)=>`<div class="m"><span style="font-size:17px;font-weight:800;letter-spacing:-.025em">${esc(v)}</span><span class="stat-unit"> ${esc(u)}</span></div>`;
+
+/* 아이콘 */
+const sv=(p,w=18)=>`<svg width="${w}" height="${w}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
+const icoChevron=`<span style="color:var(--c-t3)">${sv('<path d="m9 18 6-6-6-6"/>',20)}</span>`;
+const icoUp=sv('<path d="M22 7 13.5 15.5 8.5 10.5 2 17"/><path d="M16 7h6v6"/>',14);
+const icoDown=sv('<path d="M22 17 13.5 8.5 8.5 13.5 2 7"/><path d="M16 17h6v-6"/>',14);
+const icoWeight=sv('<path d="M6.5 6.5h11l1.5 11H5z"/><path d="M9 6.5V5a3 3 0 0 1 6 0v1.5"/>',15);
+const icoRepeat=sv('<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',15);
+const icoCal=sv('<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',15);
+const icoTimer=sv('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',15);
+const icoFire=`<span style="font-size:16px">🔥</span>`;
+
+/* ── 상태 ─────────────────────────────────────────────────── */
+const state = {
+  sessions: generateSample(),
+  weeklyGoal: 4,
+  dark: true,
+  tab: 'home',
+  range: 30,
+  calMonth: (()=>{const t=today();return {y:t.getFullYear(), m:t.getMonth()};})(),
+  selected: key(today()),
+  editor: null,
+  picker: false,
+  pickerQuery: '',
+  pickerGroup: null,
+  trendId: null,
+  toast: null,
+};
+
+const RANGES=[{d:7,l:'주간'},{d:30,l:'월간'},{d:90,l:'3개월'},{d:365,l:'1년'}];
+const TABS=[
+  {id:'home',   label:'홈',   icon:'<path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
+   desc:'오늘의 컨디션, 주간 목표 링, 최근 2주 볼륨과 최근 기록을 한 화면에.'},
+  {id:'history',label:'기록', icon:'<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+   desc:'월간 캘린더가 볼륨에 따라 진하게 칠해집니다. 날짜를 눌러 그날 기록을 확인하세요.'},
+  {id:'stats',  label:'통계', icon:'<path d="M3 21h18"/><rect x="5" y="11" width="4" height="7" rx="1"/><rect x="11" y="6" width="4" height="12" rx="1"/><rect x="17" y="14" width="4" height="4" rx="1"/>',
+   desc:'기간별 요약, 볼륨 추이, 부위 분포, 종목별 1RM 성장, 개인 최고 기록.'},
+  {id:'settings',label:'설정',icon:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 7 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H1a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 2.6 7a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 7 2.6h.1A1.7 1.7 0 0 0 9 1V1a2 2 0 1 1 4 0v.1A1.7 1.7 0 0 0 15 2.6h.1a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.5 1h.1a2 2 0 1 1 0 4H21a1.7 1.7 0 0 0-1.6 1z"/>',
+   desc:'주간 목표 횟수, 다크 모드, 예시 데이터 복구와 전체 삭제.'},
+];
+
+/* ── 화면 렌더러 ──────────────────────────────────────────── */
+function renderHome(){
+  const week=S.summarize(S.forRange(7));
+  const streak=S.currentStreak();
+  const recent=state.sessions.slice(0,3);
+  const done=S.thisWeekCount(), goal=state.weeklyGoal, left=Math.max(0,goal-done);
+  const hour=new Date().getHours();
+  const greeting = hour<6?'새벽 운동이네요' : hour<12?'좋은 아침이에요' : hour<18?'오늘도 화이팅':'오늘 하루 마무리해요';
+  const monthPts=S.dailyVolume(30);
+
+  return `<div class="page">
+    <div class="row" style="align-items:flex-start">
+      <div style="flex:1">
+        <p class="h-sub" style="font-weight:600">${esc(fmtDay(new Date()))}</p>
+        <p class="big" style="margin-top:4px">${esc(greeting)}</p>
+      </div>
+      ${streak>0?`<div class="row" style="gap:5px;background:color-mix(in srgb,var(--c-warn) 14%,transparent);
+        color:var(--c-warn);padding:8px 12px;border-radius:12px;font-size:13px;font-weight:800">
+        ${icoFire}${streak}일 연속</div>`:''}
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <div class="row" style="gap:18px">
+        <div style="position:relative;flex:none">
+          ${ring(goal?done/goal:0)}
+          <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">
+            <span style="font-size:24px;font-weight:800;line-height:1">${done}</span>
+            <span class="muted" style="font-size:11px">/ ${goal}</span>
+          </div>
+        </div>
+        <div style="flex:1;min-width:0">
+          <p style="margin:0;font-size:16px;font-weight:700">이번 주 목표</p>
+          <p style="margin:5px 0 0;font-size:13px;color:var(--c-t2)">
+            ${left===0?'목표를 모두 채웠어요! 👏':`${left}번 더 하면 목표 달성이에요`}</p>
+          <div class="row" style="gap:4px;margin-top:10px">
+            ${WD.map((w,i)=>{
+              const d=addDays(startOfWeek(today()),i);
+              const on=S.sessionsOn(key(d)).length>0;
+              return `<div style="flex:1;text-align:center">
+                <div style="height:5px;border-radius:3px;background:${on?'var(--c-accent)':'var(--c-alt)'}"></div>
+                <div style="font-size:9.5px;font-weight:700;margin-top:4px;color:${on?'var(--c-accent)':'var(--c-t3)'}">${w}</div>
+              </div>`;}).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid2" style="margin-top:14px">
+      ${statTile({label:'이번 주 볼륨',value:compact(week.volume),unit:'kg',icon:icoWeight,delta:S.volumeChange(7)})}
+      ${statTile({label:'이번 주 세트',value:week.sets,unit:'세트',icon:icoRepeat,accent:'var(--c-pos)'})}
+    </div>
+
+    ${sectionHead('최근 14일 볼륨','하루 총 들어올린 무게')}
+    <div class="card" style="padding:18px 14px 10px">${barChart(monthPts.slice(-14),{h:150})}</div>
+
+    ${sectionHead(recent.length?'최근 기록':'최근 기록', recent.length?`${state.sessions.length}개의 운동 기록`:null)}
+    ${recent.length
+      ? recent.map(s=>sessionCard(s)).join('')
+      : `<div class="card">${emptyBox('🏋️','아직 기록이 없어요','아래 «운동 기록» 버튼으로 첫 운동을 남겨보세요.')}</div>`}
+  </div>`;
+}
+
+function renderHistory(){
+  const {y,m}=state.calMonth;
+  const first=new Date(y,m,1), total=new Date(y,m+1,0).getDate();
+  const lead=wdIndex(first);
+  const by=S.volumeByDay();
+  const max=Math.max(0,...Object.values(by));
+  const t=today(), tk=key(t);
+  const isCurrent = y===t.getFullYear() && m===t.getMonth();
+
+  let cells='';
+  for(let i=0;i<lead;i++) cells+='<div></div>';
+  for(let d=1;d<=total;d++){
+    const date=new Date(y,m,d), k=key(date), v=by[k]||0;
+    const future=date>t;
+    const inten = (max<=0||v<=0) ? 0 : .18+.82*Math.min(1,v/max);
+    const cls=['day'];
+    if(inten>0) cls.push('on');
+    if(k===tk) cls.push('today');
+    if(k===state.selected) cls.push('sel');
+    const bg = inten>0
+      ? `color-mix(in srgb,var(--c-accent) ${(inten*100).toFixed(0)}%,transparent)`
+      : `var(--c-alt)`;
+    const fg = inten>.45 ? '#fff' : (future?'var(--c-t3)':'var(--c-t2)');
+    cells+=`<div class="${cls.join(' ')}" data-day="${k}" style="background:${bg};color:${fg};opacity:${future&&inten===0?.5:1}">${d}</div>`;
+  }
+
+  const monthEnd=new Date(y,m,total);
+  const list=S.inRange(first,monthEnd);
+  const sum=S.summarize(list);
+  const trained=new Set(list.map(s=>s.date)).size;
+  const daySessions=S.sessionsOn(state.selected);
+
+  return `<div class="page">
+    <div class="row">
+      <p class="big" style="flex:1;font-size:22px">${esc(fmtMonth(first))}</p>
+      <button class="iconbtn" data-cal="-1" style="border:1px solid var(--c-border)" aria-label="이전 달">${sv('<path d="m15 18-6-6 6-6"/>',20)}</button>
+      <button class="iconbtn" data-cal="1" style="border:1px solid var(--c-border);opacity:${isCurrent?.35:1}" ${isCurrent?'disabled':''} aria-label="다음 달">${sv('<path d="m9 18 6-6-6-6"/>',20)}</button>
+    </div>
+
+    <div class="card" style="margin-top:16px;padding:16px 14px 14px">
+      <div class="cal">
+        ${WD.map((w,i)=>`<div class="wd" style="${i===6?'color:color-mix(in srgb,var(--c-neg) 75%,transparent)':''}">${w}</div>`).join('')}
+        ${cells}
+      </div>
+      <div class="divider"></div>
+      <div class="row">
+        ${monthMetric('운동한 날',trained,'일')}
+        ${monthMetric('총 볼륨',compact(sum.volume),'kg')}
+        ${monthMetric('총 시간',(sum.minutes/60).toFixed(1),'시간')}
+      </div>
+    </div>
+
+    ${sectionHead(fmtDay(parse(state.selected)), daySessions.length?`${daySessions.length}개의 세션`:'기록이 없는 날이에요')}
+    ${daySessions.length
+      ? daySessions.map(s=>sessionCard(s,{showDate:false})).join('')
+      : `<div class="card">${emptyBox('📅','이 날은 쉬었어요','이 날짜로 기록을 추가할 수 있어요.',
+          `<button class="fill-btn" data-newon="${state.selected}" style="width:auto;padding:12px 20px;font-size:14px">${fmtShort(parse(state.selected))} 기록 추가</button>`)}</div>`}
+  </div>`;
+}
+const monthMetric=(l,v,u)=>`<div style="flex:1;text-align:center">
+  <div><span style="font-size:18px;font-weight:800;letter-spacing:-.02em">${esc(v)}</span><span class="stat-unit"> ${esc(u)}</span></div>
+  <div class="muted" style="font-size:11.5px;margin-top:3px">${esc(l)}</div></div>`;
+
+function renderStats(){
+  const R=state.range;
+  const sum=S.summarize(S.forRange(R));
+  const slices=S.groupDistribution(R);
+  const change=S.volumeChange(R);
+  const records=S.personalRecords().slice(0,6);
+  const trendId=state.trendId||defaultTrendId();
+  const trend=trendId?S.oneRepMaxTrend(trendId):[];
+  const def=trendId?exDef(trendId):null;
+
+  return `<div class="page">
+    <p class="big">통계</p>
+    <p class="h-sub">기록이 쌓일수록 더 정확해져요</p>
+
+    <div class="seg" style="margin-top:16px">
+      ${RANGES.map(r=>`<button data-range="${r.d}" aria-pressed="${R===r.d}">${r.l}</button>`).join('')}
+    </div>
+
+    <div class="grid2" style="margin-top:18px">
+      ${statTile({label:'총 볼륨',value:compact(sum.volume),unit:'kg',icon:icoWeight,delta:change})}
+      ${statTile({label:'운동 횟수',value:sum.count,unit:'회',icon:icoCal,accent:'var(--c-pos)'})}
+    </div>
+    <div class="grid2" style="margin-top:12px">
+      ${statTile({label:'총 세트',value:sum.sets,unit:'세트',icon:icoRepeat,accent:GROUPS.back.color})}
+      ${statTile({label:'평균 운동 시간',value:sum.count?Math.round(sum.minutes/sum.count):0,unit:'분',icon:icoTimer,accent:'var(--c-warn)'})}
+    </div>
+
+    <div class="card" style="margin-top:12px;padding:16px 18px">
+      <div class="row">
+        <div class="ico" style="width:42px;height:42px;border-radius:13px;background:color-mix(in srgb,var(--c-warn) 14%,transparent);font-size:20px">🔥</div>
+        <div style="flex:1;min-width:0">
+          <div class="stat-label">연속 기록</div>
+          <div style="font-size:15.5px;font-weight:700;margin-top:3px">
+            ${S.currentStreak()>0?`${S.currentStreak()}일 연속 운동 중`:'연속 기록이 끊겼어요'}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="color:var(--c-warn);font-size:13px;font-weight:800">최고 ${S.longestStreak()}일</div>
+          <div class="muted" style="font-size:11px;margin-top:2px">개인 최장</div>
+        </div>
+      </div>
+    </div>
+
+    ${sectionHead('볼륨 추이', R<=30?'일별 총 볼륨':'주별 총 볼륨')}
+    <div class="card" style="padding:18px 14px 10px">
+      ${barChart(R<=30 ? S.dailyVolume(R) : S.weeklyVolume(R===90?13:26),{h:170})}
+    </div>
+
+    ${sectionHead('부위별 분포','어디에 힘을 쏟고 있는지')}
+    <div class="card">
+      ${slices.length? `<div class="row" style="gap:16px">
+          <div style="position:relative;flex:none">
+            ${donut(slices)}
+            <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">
+              <span style="font-size:14px;font-weight:800">${GROUPS[slices[0].group].label}</span>
+              <span style="font-size:18px;font-weight:800;color:${GROUPS[slices[0].group].color}">${Math.round(slices[0].ratio*100)}%</span>
+            </div>
+          </div>
+          <div style="flex:1;min-width:0">
+            ${slices.slice(0,6).map(s=>`<div class="row" style="gap:8px;padding:4px 0">
+              <span class="dot" style="background:${GROUPS[s.group].color}"></span>
+              <span style="flex:1;font-size:13px;font-weight:600;color:var(--c-t2)">${GROUPS[s.group].label}</span>
+              <span style="font-size:13px;font-weight:800">${Math.round(s.ratio*100)}%</span></div>`).join('')}
+          </div>
+        </div>` : emptyBox('🍩','표시할 기록이 없어요','이 기간에 기록된 운동이 없습니다.')}
+    </div>
+
+    ${sectionHead('종목별 성장','추정 1RM (Epley 공식)',
+      trendId?`<button class="txtbtn" data-trend="open">종목 변경</button>`:'')}
+    <div class="card" style="padding:16px 14px 10px">
+      ${trendId? `<div class="row" style="gap:7px">
+            <span class="dot" style="background:${GROUPS[def.group].color}"></span>
+            <span style="font-size:14.5px;font-weight:700">${esc(def.name)}</span>
+            <span style="flex:1"></span>
+            ${trend.length>=2?trendDelta(trend[0].value,trend[trend.length-1].value):''}
+          </div>
+          <div style="margin-top:6px">${lineChart(trend,{color:GROUPS[def.group].color,fmt:v=>v.toFixed(1)+'kg'})}</div>`
+        : emptyBox('📈','아직 추이를 그릴 수 없어요','웨이트 종목을 기록하면 성장 그래프가 나타납니다.')}
+    </div>
+
+    ${sectionHead('요일별 운동 패턴','어느 요일에 주로 운동하는지')}
+    <div class="card" style="padding:18px 14px 10px">
+      ${barChart(S.byWeekday(R),{h:130,labelEvery:1,color:'var(--c-pos)'})}
+    </div>
+
+    ${sectionHead('개인 최고 기록', records.length?`추정 1RM 기준 상위 ${records.length}종목`:null)}
+    <div class="card" style="padding:6px 16px">
+      ${records.length? records.map((r,i)=>`
+        ${i?'<div class="divider" style="margin:0"></div>':''}
+        <div class="row" style="padding:12px 0">
+          <span style="width:22px;font-size:13px;font-weight:800;color:${i<3?'var(--c-warn)':'var(--c-t3)'}">${i+1}</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.def.name)}</div>
+            <div class="muted" style="font-size:11.5px;margin-top:2px">최고 ${fmtWeight(r.topWeight)}kg · ${esc(fmtRelative(r.date))}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:15px;font-weight:800;color:${GROUPS[r.def.group].color}">${r.best1rm.toFixed(1)}kg</div>
+            <div class="muted" style="font-size:10.5px">추정 1RM</div>
+          </div>
+        </div>`).join('')
+      : emptyBox('🏆','아직 기록이 없어요','무게와 횟수를 기록하면 자동으로 계산됩니다.')}
+    </div>
+  </div>`;
+}
+function trendDelta(a,b){
+  const d=b-a, up=d>=0, c=up?'var(--c-pos)':'var(--c-neg)';
+  return `<span class="chip" style="background:color-mix(in srgb,${c} 13%,transparent);color:${c};font-size:11.5px">${up?'+':''}${d.toFixed(1)}kg</span>`;
+}
+function defaultTrendId(){
+  const c={};
+  for(const s of state.sessions) for(const e of s.exercises){
+    if(exDef(e.exerciseId).tracking==='cardio') continue;
+    if(ex1rm(e)>0) c[e.exerciseId]=(c[e.exerciseId]||0)+1;
+  }
+  const k=Object.keys(c);
+  return k.length ? k.sort((a,b)=>c[b]-c[a])[0] : null;
+}
+
+function renderSettings(){
+  const all=S.summarize(state.sessions);
+  return `<div class="page">
+    <p class="big">설정</p>
+
+    ${sectionHead('전체 기록')}
+    <div class="card"><div class="row">
+      ${monthMetric('총 운동',all.count,'회')}
+      ${monthMetric('누적 볼륨',compact(all.volume),'kg')}
+      ${monthMetric('누적 시간',Math.round(all.minutes/60),'시간')}
+    </div></div>
+
+    ${sectionHead('주간 목표','한 주에 몇 번 운동할까요?')}
+    <div class="card">
+      <div class="row">
+        <span style="flex:1;font-size:17px;font-weight:800">주 ${state.weeklyGoal}회</span>
+        <span class="muted" style="font-size:12.5px">이번 주 ${S.thisWeekCount()}회 완료</span>
+      </div>
+      <input type="range" min="1" max="7" step="1" value="${state.weeklyGoal}" id="goalRange" style="margin-top:12px" aria-label="주간 목표 횟수">
+    </div>
+
+    ${sectionHead('화면')}
+    <div class="card"><div class="row" style="gap:12px">
+      <div class="ico" style="width:36px;height:36px;border-radius:11px;background:var(--c-accent-soft);color:var(--c-accent);font-size:16px">${state.dark?'🌙':'☀️'}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:15px;font-weight:600">다크 모드</div>
+        <div class="muted" style="font-size:12px">${state.dark?'어두운 화면으로 표시합니다':'밝은 화면으로 표시합니다'}</div>
+      </div>
+      <button class="switch" id="darkSwitch" role="switch" aria-checked="${state.dark}" aria-label="다크 모드"><span class="knob"></span></button>
+    </div></div>
+
+    ${sectionHead('데이터')}
+    <div class="card" style="padding:6px 10px">
+      <div class="row tap" data-act="sample" style="gap:12px;padding:12px 4px">
+        <div class="ico" style="width:36px;height:36px;border-radius:11px;background:var(--c-accent-soft);color:var(--c-accent);font-size:15px">✨</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14.5px;font-weight:600">예시 데이터 다시 넣기</div>
+          <div class="muted" style="font-size:12px">10주치 샘플 기록으로 통계 화면을 살펴봐요</div>
+        </div>${icoChevron}
+      </div>
+      <div class="divider" style="margin:0 4px"></div>
+      <div class="row tap" data-act="clear" style="gap:12px;padding:12px 4px">
+        <div class="ico" style="width:36px;height:36px;border-radius:11px;background:color-mix(in srgb,var(--c-neg) 13%,transparent);color:var(--c-neg)">${sv('<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>',19)}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14.5px;font-weight:600">모든 기록 삭제</div>
+          <div class="muted" style="font-size:12px">되돌릴 수 없어요</div>
+        </div>${icoChevron}
+      </div>
+    </div>
+
+    <div style="text-align:center;margin-top:26px">
+      <div class="muted" style="font-size:12.5px;font-weight:600">핏로그 1.0.0</div>
+      <div class="muted" style="font-size:11.5px;margin-top:3px">기록은 기기 안에만 저장됩니다</div>
+    </div>
+  </div>`;
+}
+
+/* ── 편집 화면 ─────────────────────────────────────────────── */
+function renderEditor(){
+  const s=state.editor;
+  return `<div class="overlay">
+    <div class="appbar">
+      <button class="iconbtn" data-ed="back" aria-label="뒤로">${sv('<path d="m15 18-6-6 6-6"/>',22)}</button>
+      <h2>${s.isNew?'운동 기록':'기록 편집'}</h2>
+      ${s.isNew?'':`<button class="iconbtn" data-ed="delete" style="color:var(--c-neg)" aria-label="삭제">${sv('<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>',20)}</button>`}
+      <button class="txtbtn" data-ed="save">저장</button>
+    </div>
+    <div class="app-body"><div class="page" style="padding-bottom:40px">
+      <div class="summary-bar" id="sumBar">
+        <div class="m"><div class="v" id="sumVol">${compact(sVolume(s))}<span style="font-size:11px;opacity:.8"> kg</span></div><div class="l">총 볼륨</div></div>
+        <div class="m"><div class="v" id="sumSets">${sSets(s)}<span style="font-size:11px;opacity:.8"> 세트</span></div><div class="l">완료 세트</div></div>
+        <div class="m"><div class="v" id="sumReps">${sReps(s)}<span style="font-size:11px;opacity:.8"> 회</span></div><div class="l">총 횟수</div></div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <div class="field"><span>날짜</span>
+          <span style="font-size:14.5px;font-weight:700">${esc(fmtDay(parse(s.date)))}</span></div>
+        <div style="margin-top:14px">
+          <input class="inp" id="edTitle" placeholder="루틴 이름 — 예: 가슴 · 삼두" value="${esc(s.title)}">
+        </div>
+        <div class="field" style="margin-top:14px"><span>운동 시간</span>
+          ${stepper('dur',s.durationMin,`${s.durationMin}분`,s.durationMin<=0,s.durationMin>=300)}</div>
+        <div class="field" style="margin-top:14px"><span>컨디션</span>
+          <div class="stars">${[1,2,3,4,5].map(i=>`<button data-cond="${i}" class="${i<=s.condition?'on':''}" aria-label="컨디션 ${i}">${i<=s.condition?'★':'☆'}</button>`).join('')}</div></div>
+      </div>
+
+      ${sectionHead('종목', s.exercises.length?`${s.exercises.length}개 종목`:'아래에서 종목을 추가하세요')}
+      ${s.exercises.map((e,i)=>exerciseBlock(e,i)).join('')}
+
+      <button class="outline-btn" data-ed="addex" style="margin-top:2px">＋ 종목 추가</button>
+
+      ${sectionHead('메모')}
+      <textarea class="inp" id="edMemo" rows="3" placeholder="오늘 운동은 어땠나요?">${esc(s.memo)}</textarea>
+
+      <div style="margin-top:26px"><button class="fill-btn" data-ed="save">저장하기</button></div>
+    </div></div>
+  </div>`;
+}
+
+function exerciseBlock(e,i){
+  const def=exDef(e.exerciseId);
+  const cardio=def.tracking==='cardio';
+  const body=def.tracking==='body';
+  return `<div class="card" style="padding:14px 12px 14px 16px">
+    <div class="row" style="gap:8px">
+      <span class="dot" style="width:9px;height:9px;background:${GROUPS[def.group].color}"></span>
+      <span style="flex:1;min-width:0;font-size:15.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(def.name)}</span>
+      ${cardio?'':`<span class="muted" style="font-size:12px;font-weight:700" data-exvol="${i}">${compact(exVolume(e))}kg</span>`}
+      <button class="iconbtn" data-rmex="${i}" style="width:30px;height:30px;color:var(--c-t3)" aria-label="종목 삭제">${sv('<path d="M18 6 6 18M6 6l12 12"/>',17)}</button>
+    </div>
+    ${cardio ? `
+      <div class="field" style="margin-top:10px"><span>시간</span>
+        ${stepper(`exdur-${i}`,e.durationMin,`${e.durationMin}분`,e.durationMin<=0,e.durationMin>=300)}</div>
+      <div class="field" style="margin-top:10px"><span>거리</span>
+        ${stepper(`exdist-${i}`,e.distanceKm,`${e.distanceKm.toFixed(1)}km`,e.distanceKm<=0,e.distanceKm>=100)}</div>
+    ` : `
+      <div class="row" style="padding:6px 8px 6px 2px;font-size:11px;color:var(--c-t3)">
+        <span style="width:22px">#</span><span style="flex:1">무게 (kg)</span><span style="flex:1">횟수</span><span style="width:72px"></span>
+      </div>
+      ${e.sets.map((st,j)=>`
+        <div class="setrow">
+          <span class="n" style="color:${st.done?'var(--c-accent)':'var(--c-t3)'}">${j+1}</span>
+          <input class="inp num" style="flex:1;min-width:0" inputmode="decimal" data-w="${i}-${j}"
+            value="${body?'':fmtWeight(st.w)}" ${body?'disabled placeholder="맨몸"':''}>
+          <input class="inp num" style="flex:1;min-width:0" inputmode="numeric" data-r="${i}-${j}" value="${st.r}">
+          <button class="iconbtn" data-done="${i}-${j}" style="width:30px;height:30px;color:${st.done?'var(--c-pos)':'var(--c-t3)'}" aria-label="세트 완료">
+            ${st.done?sv('<circle cx="12" cy="12" r="10" fill="currentColor" stroke="none"/><path d="m8 12 2.6 2.6L16 9.4" stroke="var(--c-surface)" stroke-width="2.4"/>',22)
+                     :sv('<circle cx="12" cy="12" r="9"/>',22)}
+          </button>
+          <span style="width:30px">${e.sets.length>1?`<button class="iconbtn" data-rmset="${i}-${j}" style="width:28px;height:28px;color:var(--c-t3)" aria-label="세트 삭제">${sv('<circle cx="12" cy="12" r="9"/><path d="M8 12h8"/>',17)}</button>`:''}</span>
+        </div>`).join('')}
+      <button class="txtbtn" data-addset="${i}" style="padding:6px 8px">＋ 세트 추가</button>
+    `}
+  </div>`;
+}
+const stepper=(id,val,label,minDis,maxDis)=>`<div class="stepper">
+  <button data-step="${id}--1" ${minDis?'disabled':''} aria-label="줄이기">−</button>
+  <span class="val">${esc(label)}</span>
+  <button data-step="${id}-1" ${maxDis?'disabled':''} aria-label="늘리기">＋</button></div>`;
+
+/* ── 종목 선택 ─────────────────────────────────────────────── */
+function renderPicker(){
+  const q=state.pickerQuery.trim();
+  let items=EX.filter(e=>!q||e.name.includes(q));
+  if(state.pickerGroup) items=items.filter(e=>e.group===state.pickerGroup);
+  const grouped={};
+  for(const e of items) (grouped[e.group]=grouped[e.group]||[]).push(e);
+
+  return `<div class="overlay">
+    <div class="appbar">
+      <button class="iconbtn" data-pk="close" aria-label="닫기">${sv('<path d="m15 18-6-6 6-6"/>',22)}</button>
+      <h2>종목 선택</h2>
+    </div>
+    <div style="padding:4px 18px 12px">
+      <input class="inp" id="pkSearch" placeholder="종목 검색" value="${esc(state.pickerQuery)}">
+    </div>
+    <div class="filters">
+      <button data-pkg="" style="${!state.pickerGroup?`border-color:var(--c-accent);color:var(--c-accent);background:color-mix(in srgb,var(--c-accent) 16%,transparent)`:''}">전체</button>
+      ${GROUP_ORDER.map(g=>`<button data-pkg="${g}" style="${state.pickerGroup===g?`border-color:${GROUPS[g].color};color:${GROUPS[g].color};background:color-mix(in srgb,${GROUPS[g].color} 16%,transparent)`:''}">${GROUPS[g].label}</button>`).join('')}
+    </div>
+    <div class="app-body"><div class="page" style="padding-top:0">
+      ${items.length? GROUP_ORDER.filter(g=>grouped[g]).map(g=>`
+        <div class="row" style="gap:8px;padding:14px 2px 8px">
+          <span class="dot" style="background:${GROUPS[g].color}"></span>
+          <span style="font-size:13px;font-weight:700;color:var(--c-t2)">${GROUPS[g].label}</span>
+        </div>
+        <div class="card" style="padding:0 14px">
+          ${grouped[g].map(e=>`<div class="pickrow" data-pick="${e.id}">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:14.5px;font-weight:600">${esc(e.name)}</div>
+              <div class="muted" style="font-size:11.5px;margin-top:1px">${e.tracking==='cardio'?'시간 · 거리':e.tracking==='body'?'맨몸':'무게 · 횟수'}</div>
+            </div>
+            <span class="muted" style="font-size:19px">＋</span>
+          </div>`).join('')}
+        </div>`).join('')
+      : emptyBox('🔍','찾는 종목이 없어요','검색어나 부위 필터를 바꿔보세요.')}
+    </div></div>
+  </div>`;
+}
+
+/* ── 렌더 ─────────────────────────────────────────────────── */
+const $ = s => document.querySelector(s);
+const screenEl=$('#screen'), bodyEl=$('#appBody'), fabEl=$('#fab');
+
+function render(){
+  screenEl.classList.toggle('light',!state.dark);
+  bodyEl.innerHTML = state.tab==='home'?renderHome()
+                   : state.tab==='history'?renderHistory()
+                   : state.tab==='stats'?renderStats()
+                   : renderSettings();
+
+  // 탭바
+  $('#tabbar').innerHTML = TABS.map(t=>`
+    <button data-tab="${t.id}" aria-selected="${state.tab===t.id}">
+      <span class="pill">${sv(t.icon,22)}</span>${t.label}</button>`).join('');
+
+  fabEl.style.display = state.tab==='settings' ? 'none' : 'flex';
+
+  // 오버레이
+  screenEl.querySelectorAll('.overlay').forEach(o=>o.remove());
+  if(state.picker)      screenEl.insertAdjacentHTML('beforeend',renderPicker());
+  else if(state.editor) screenEl.insertAdjacentHTML('beforeend',renderEditor());
+
+  screenEl.querySelectorAll('.toast').forEach(t=>t.remove());
+  if(state.toast) screenEl.insertAdjacentHTML('beforeend',`<div class="toast">${esc(state.toast)}</div>`);
+
+  // 우측 레일 현재 탭 표시
+  document.querySelectorAll('#screenlist button').forEach(b=>
+    b.setAttribute('aria-current', b.dataset.goto===state.tab));
+
+  if(state.picker) $('#pkSearch')?.focus({preventScroll:true});
+}
+function toast(msg){
+  state.toast=msg; render();
+  clearTimeout(toast._t);
+  toast._t=setTimeout(()=>{state.toast=null;render();},1900);
+}
+
+/* ── 상호작용 ─────────────────────────────────────────────── */
+function newSession(dateKey){
+  return {id:'w'+Date.now(), date:dateKey||key(today()), title:'', exercises:[],
+          durationMin:60, memo:'', condition:3, isNew:true};
+}
+function openSession(id){
+  const s=state.sessions.find(x=>x.id===id);
+  if(!s) return;
+  state.editor=JSON.parse(JSON.stringify(s));
+  state.editor.isNew=false;
+  render();
+}
+function saveEditor(){
+  const s=state.editor;
+  if(!s) return;
+  s.title=($('#edTitle')?.value||'').trim();
+  s.memo=($('#edMemo')?.value||'').trim();
+  const isNew=s.isNew;
+  delete s.isNew;
+  if(isNew && !s.exercises.length){ state.editor=null; render(); return; }
+  const i=state.sessions.findIndex(x=>x.id===s.id);
+  if(i>=0) state.sessions[i]=s; else state.sessions.push(s);
+  state.sessions.sort((a,b)=>b.date.localeCompare(a.date));
+  state.editor=null;
+  toast(isNew?'기록을 저장했어요':'기록을 수정했어요');
+}
+function syncSummary(){
+  const s=state.editor;
+  if(!s) return;
+  const set=(id,v,u)=>{const el=$(id); if(el) el.innerHTML=`${v}<span style="font-size:11px;opacity:.8"> ${u}</span>`;};
+  set('#sumVol',compact(sVolume(s)),'kg');
+  set('#sumSets',sSets(s),'세트');
+  set('#sumReps',sReps(s),'회');
+  s.exercises.forEach((e,i)=>{
+    const el=screenEl.querySelector(`[data-exvol="${i}"]`);
+    if(el) el.textContent=compact(exVolume(e))+'kg';
+  });
+}
+
+screenEl.addEventListener('click', ev=>{
+  const t=ev.target.closest('[data-tab],[data-open],[data-day],[data-cal],[data-range],[data-newon],[data-act],[data-ed],[data-rmex],[data-addset],[data-rmset],[data-done],[data-step],[data-cond],[data-pk],[data-pkg],[data-pick],[data-trend]');
+  if(!t) return;
+  const d=t.dataset;
+
+  if(d.tab){ state.tab=d.tab; state.editor=null; state.picker=false; return render(); }
+  if(d.open){ return openSession(d.open); }
+  if(d.day){ state.selected=d.day; return render(); }
+  if(d.cal){
+    let {y,m}=state.calMonth; m+=Number(d.cal);
+    if(m<0){m=11;y--;} if(m>11){m=0;y++;}
+    state.calMonth={y,m}; return render();
+  }
+  if(d.range){ state.range=Number(d.range); return render(); }
+  if(d.newon){ state.editor=newSession(d.newon); return render(); }
+  if(d.trend){
+    // 기록이 있는 종목 사이를 순환한다.
+    const ids=[...new Set(state.sessions.flatMap(s=>s.exercises.filter(e=>ex1rm(e)>0).map(e=>e.exerciseId)))];
+    if(!ids.length) return;
+    const cur=state.trendId||defaultTrendId();
+    state.trendId=ids[(ids.indexOf(cur)+1)%ids.length];
+    return render();
+  }
+  if(d.act==='sample'){ state.sessions=generateSample(); state.trendId=null; return toast('예시 데이터를 채웠어요'); }
+  if(d.act==='clear'){ state.sessions=[]; state.trendId=null; return toast('모든 기록을 삭제했어요'); }
+
+  /* 편집 화면 */
+  const s=state.editor;
+  if(d.ed==='back'){ saveEditor(); return; }
+  if(d.ed==='save'){ saveEditor(); return; }
+  if(d.ed==='delete'){
+    state.sessions=state.sessions.filter(x=>x.id!==s.id);
+    state.editor=null; return toast('기록을 삭제했어요');
+  }
+  if(d.ed==='addex'){ state.picker=true; state.pickerQuery=''; state.pickerGroup=null; return render(); }
+  if(d.rmex!=null && d.rmex!==''){ s.exercises.splice(Number(d.rmex),1); return render(); }
+  if(d.addset!=null && d.addset!==''){
+    const e=s.exercises[Number(d.addset)];
+    const last=e.sets[e.sets.length-1]||{w:20,r:10};
+    e.sets.push({w:last.w,r:last.r,done:false});
+    return render();
+  }
+  if(d.rmset){ const [i,j]=d.rmset.split('-').map(Number); s.exercises[i].sets.splice(j,1); return render(); }
+  if(d.done){
+    const [i,j]=d.done.split('-').map(Number);
+    const st=s.exercises[i].sets[j]; st.done=!st.done; return render();
+  }
+  if(d.cond){ s.condition=Number(d.cond); return render(); }
+  if(d.step){
+    const m=d.step.match(/^(.+?)-(-?1)$/);
+    const [,field,dirStr]=m; const dir=Number(dirStr);
+    if(field==='dur') s.durationMin=Math.max(0,Math.min(300,s.durationMin+dir*5));
+    else if(field.startsWith('exdur-')){
+      const e=s.exercises[Number(field.split('-')[1])];
+      e.durationMin=Math.max(0,Math.min(300,e.durationMin+dir*5));
+    } else if(field.startsWith('exdist-')){
+      const e=s.exercises[Number(field.split('-')[1])];
+      e.distanceKm=Math.max(0,Math.min(100,Math.round((e.distanceKm+dir*.5)*10)/10));
+    }
+    return render();
+  }
+
+  /* 종목 선택 */
+  if(d.pk==='close'){ state.picker=false; return render(); }
+  if(d.pkg!=null){ state.pickerGroup=d.pkg||null; return render(); }
+  if(d.pick){
+    const def=exDef(d.pick);
+    const last=S.lastPerformed(def.id, s.id);
+    let entry;
+    if(def.tracking==='cardio') entry={exerciseId:def.id,sets:[],durationMin:20,distanceKm:3};
+    else if(last) entry={exerciseId:def.id,sets:last.sets.map(x=>({w:x.w,r:x.r,done:false}))};
+    else entry={exerciseId:def.id,sets:[0,1,2].map(()=>({w:def.tracking==='body'?0:20,r:10,done:false}))};
+    s.exercises.push(entry);
+    state.picker=false;
+    return render();
+  }
+});
+
+/* 입력 (포커스를 잃지 않도록 부분 갱신만) */
+screenEl.addEventListener('input', ev=>{
+  const el=ev.target, d=el.dataset;
+  if(el.id==='pkSearch'){ state.pickerQuery=el.value; return render(); }
+  if(el.id==='goalRange'){ state.weeklyGoal=Number(el.value); return render(); }
+  if(!state.editor) return;
+  if(d.w){
+    const [i,j]=d.w.split('-').map(Number);
+    state.editor.exercises[i].sets[j].w=parseFloat(el.value)||0;
+    return syncSummary();
+  }
+  if(d.r){
+    const [i,j]=d.r.split('-').map(Number);
+    state.editor.exercises[i].sets[j].r=parseInt(el.value,10)||0;
+    return syncSummary();
+  }
+});
+screenEl.addEventListener('click', ev=>{
+  if(ev.target.closest('#darkSwitch')){ state.dark=!state.dark; render(); }
+});
+
+fabEl.addEventListener('click', ()=>{ state.editor=newSession(); render(); });
+
+/* 우측 레일 → 탭 전환 */
+$('#screenlist').innerHTML = TABS.map((t,i)=>`
+  <button type="button" data-goto="${t.id}">
+    <span class="num">0${i+1}</span>
+    <span><span class="nm">${t.label}</span><span class="ds">${t.desc}</span></span>
+    <span class="go">화면 보기 →</span>
+  </button>`).join('');
+$('#screenlist').addEventListener('click', ev=>{
+  const b=ev.target.closest('button[data-goto]');
+  if(!b) return;
+  state.tab=b.dataset.goto; state.editor=null; state.picker=false;
+  render();
+  if(window.innerWidth<=980) document.querySelector('.stage').scrollIntoView({behavior:'smooth',block:'start'});
+});
+
+/* 시계 */
+function tick(){
+  const n=new Date();
+  $('#clock').textContent=`${n.getHours()}:${pad(n.getMinutes())}`;
+}
+tick(); setInterval(tick,20000);
+
+/* 좁은 화면에서 기기 축소 */
+function fit(){
+  const dev=$('#device'), holder=dev.parentElement;
+  const avail=holder.clientWidth;
+  const scale=Math.min(1, avail/402);   // 그림자가 잘리지 않도록 살짝 여유를 둔다
+  dev.style.transform = scale<1 ? `scale(${scale})` : '';
+  holder.style.height = scale<1 ? `${812*scale+22}px` : '';
+}
+window.addEventListener('resize',fit);
+
+render();
+fit();
+</script>
