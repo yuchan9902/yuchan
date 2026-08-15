@@ -1,0 +1,63 @@
+name: Build & Deploy
+
+# Pull requests get the build and lint check only. Pushes to main additionally
+# publish workout-tracker/dist to GitHub Pages.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'workout-tracker/**'
+      - '.github/workflows/deploy.yml'
+  pull_request:
+    paths:
+      - 'workout-tracker/**'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: workout-tracker
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: workout-tracker/package-lock.json
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+
+      # `path` is resolved from the workspace root — `defaults.working-directory`
+      # applies to `run` steps only.
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
+        with:
+          path: workout-tracker/dist
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    # Let an in-flight deploy finish rather than cancelling it half-published.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

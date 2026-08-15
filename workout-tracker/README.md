@@ -13,6 +13,28 @@ npm run preview
 빌드 결과는 순수 정적 파일이라 GitHub Pages·Netlify·S3 어디에나 그대로 올릴 수 있습니다
 (`vite.config.ts`의 `base: './'` 덕분에 하위 경로 배포도 동작합니다).
 
+## 배포
+
+`.github/workflows/deploy.yml`이 배포를 담당합니다.
+
+- **PR**: `npm ci → lint → build`만 돌려서 빌드가 깨지지 않았는지 확인합니다.
+- **main 푸시**: 같은 빌드를 돌린 뒤 `dist/`를 GitHub Pages에 게시합니다.
+- 수동 실행이 필요하면 Actions 탭에서 workflow_dispatch로 돌릴 수 있습니다.
+
+**처음 한 번은 저장소 설정이 필요합니다** — Settings → Pages → Build and deployment →
+Source를 **GitHub Actions**로 바꿔주세요. 그 다음부터 main에 머지될 때마다
+`https://<사용자명>.github.io/<저장소명>/` 으로 자동 배포됩니다.
+
+다른 곳에 올릴 때도 빌드 명령은 같습니다.
+
+| 호스트 | 설정 |
+|---|---|
+| Netlify | base `workout-tracker`, build `npm run build`, publish `workout-tracker/dist` |
+| Vercel | root directory `workout-tracker` (Vite 프리셋 자동 인식) |
+| S3 · 정적 서버 | `workout-tracker/dist`를 통째로 업로드 |
+
+클라이언트 라우터가 없어서(탭 상태만 사용) SPA 404 폴백 설정은 필요 없습니다.
+
 ## 화면
 
 | 탭 | 내용 |
