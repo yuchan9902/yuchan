@@ -146,12 +146,33 @@ function DataMenu({
     return () => clearTimeout(t)
   }, [message])
 
-  function download() {
-    const blob = new Blob([onExport()], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
+  async function download() {
+    const filename = `fitlog-backup-${new Date().toISOString().slice(0, 10)}.json`
+    const json = onExport()
+
+    // Inside the Artifact viewer the page cannot start its own download, so the
+    // save goes through the host and the viewer confirms it. Everywhere else
+    // `claude` is undefined and the ordinary blob link runs.
+    const host = typeof claude === 'undefined' ? null : claude
+    if (host) {
+      try {
+        const downloads = await host.use('downloads')
+        if (downloads) {
+          await downloads.save({ filename, data: json })
+          setMessage('내보냈어요')
+          return
+        }
+      } catch (e) {
+        const code = (e as { code?: string } | null)?.code
+        setMessage(code === 'declined' ? '내보내기를 취소했어요' : '내보내지 못했어요')
+        return
+      }
+    }
+
+    const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }))
     const a = document.createElement('a')
     a.href = url
-    a.download = `fitlog-backup-${new Date().toISOString().slice(0, 10)}.json`
+    a.download = filename
     a.click()
     URL.revokeObjectURL(url)
   }
